@@ -292,40 +292,40 @@ const SolarSystemJD2451545 = [
   {
     body: "Sun",
     position: new Vec3(
-      -1.067598502264559e+06 * Kilo * Metre, // km
-      -3.959890535950128e+05 * Kilo * Metre, // km
-      -1.380711260212289e+05 * Kilo * Metre, // km
+      -1.067598502264559e+06 * Kilo * Metre,
+      -3.959890535950128e+05 * Kilo * Metre,
+      -1.380711260212289e+05 * Kilo * Metre,
     ),
     velocity: new Vec3(
-      +9.312570119052345e-03 * Kilo * Metre / Second, // km/s
-      -1.170150735349599e-02 * Kilo * Metre / Second, // km/s
-      -5.251247980405208e-03 * Kilo * Metre / Second, // km/s
+      +9.312570119052345e-03 * Kilo * Metre / Second,
+      -1.170150735349599e-02 * Kilo * Metre / Second,
+      -5.251247980405208e-03 * Kilo * Metre / Second,
     ),
   },
   {
     body: "Earth",
     position: new Vec3(
-      -2.756663225908748e+07 * Kilo * Metre, // km
-      +1.323614283011928e+08 * Kilo * Metre, // km
-      +5.741864727316781e+07 * Kilo * Metre, // km
+      -2.756663225908748e+07 * Kilo * Metre,
+      +1.323614283011928e+08 * Kilo * Metre,
+      +5.741864727316781e+07 * Kilo * Metre,
     ),
     velocity: new Vec3(
-      -2.978494749707266e+01 * Kilo * Metre / Second, // km/s
-      -5.029753833589443e+00 * Kilo * Metre / Second, // km/s
-      -2.180645051457051e+00 * Kilo * Metre / Second, // km/s
+      -2.978494749707266e+01 * Kilo * Metre / Second,
+      -5.029753833589443e+00 * Kilo * Metre / Second,
+      -2.180645051457051e+00 * Kilo * Metre / Second,
     ),
   },
   {
     body: "Luna",
     position: new Vec3(
-      -2.785824064408012e+07 * Kilo * Metre, // km
-      +1.320947114679507e+08 * Kilo * Metre, // km
-      +5.734254478723364e+07 * Kilo * Metre, // km
+      -2.785824064408012e+07 * Kilo * Metre,
+      +1.320947114679507e+08 * Kilo * Metre,
+      +5.734254478723364e+07 * Kilo * Metre,
     ),
     velocity: new Vec3(
-      -2.914141611066932e+01 * Kilo * Metre / Second, // km/s
-      -5.695841519211172e+00 * Kilo * Metre / Second, // km/s
-      -2.481970755642522e+00 * Kilo * Metre / Second, // km/s
+      -2.914141611066932e+01 * Kilo * Metre / Second,
+      -5.695841519211172e+00 * Kilo * Metre / Second,
+      -2.481970755642522e+00 * Kilo * Metre / Second,
     ),
   },
 ]
