@@ -405,7 +405,7 @@ const SolarSystemJD2451545 = [
 ]
 
 function main() {
-  const camera = new THREE.PerspectiveCamera(75, 800 / 600, 0.1, 10000);
+  const camera = new THREE.PerspectiveCamera(75, 800 / 600, 0.001, 10000);
 
   const renderer = new THREE.WebGLRenderer({canvas, antialias: true});
   renderer.setSize(800, 600);
@@ -459,7 +459,7 @@ function main() {
     initial_state,
     e.ComputeMassiveBodiesGravitationalAccelerations.bind(e),
     append_state,
-    2e5
+    2e3
   );
   srkn.Solve(3e7);
 
@@ -499,6 +499,8 @@ function main() {
     lod.position.copy(new THREE.Vector3(q.x, q.y, q.z).applyMatrix4(m));
     scene.add(lod);
     lods.push(lod);
+    lod.userData.bodyIdx = i;
+    lod.name = SolarSystemData[i].name;
   }
 
   function animate() {
@@ -506,6 +508,20 @@ function main() {
     renderer.render(scene, camera);
     controls.update();
     lods.forEach(lod => lod.update(camera));
+  }
+
+  canvas.onclick = e => {
+    const {width, height} = e.target.getBoundingClientRect();
+    const mouse = new THREE.Vector2(e.offsetX, height - e.offsetY);
+    const screenP = new THREE.Vector2();
+    const hit = lods.find(lod => {
+      const p = lod.position.clone().project(camera);
+      screenP.set((p.x + 1) / 2 * width, (p.y + 1) / 2 * height)
+      return mouse.distanceTo(screenP) < 5;
+    });
+    if (hit) {
+      controls.target.copy(hit.position);
+    }
   }
   animate();
 }
