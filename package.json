@@ -1,0 +1,28 @@
+{
+  "name": "traj",
+  "version": "1.0.0",
+  "description": "orbital mechanics & mission planning in JavaScript",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/nornagon/traj.git"
+  },
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/nornagon/traj/issues"
+  },
+  "homepage": "https://github.com/nornagon/traj#readme",
+  "devDependencies": {
+    "@types/three": "^0.92.18",
+    "three": "^0.96.0",
+    "three.meshline": "^1.1.0",
+    "ts-loader": "^5.0.0",
+    "typescript": "^3.0.3",
+    "webpack": "^4.17.2",
+    "webpack-cli": "^3.1.0"
+  }
+}

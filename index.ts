@@ -1,7 +1,15 @@
+import * as THREE from 'three';
+import * as OC from './OrbitControls';
+const {OrbitControls} = OC as any;
+import * as TC from './TrackballControls';
+const {TrackballControls} = TC as any;
+import {MeshLine, MeshLineMaterial} from 'three.meshline';
+
 const Metre = 1;
 const Kilo = 1e3;
 const Second = 1;
 const Newton = 1;
+const Degree = Math.PI / 180;
 const Kilogram = 1;
 const GravitationalConstant = 6.67384e-11 * Newton * Metre * Metre / Kilogram / Kilogram;
 
@@ -275,22 +283,47 @@ function ComputeGravitationalAccelerationByMassiveBodyOnMassiveBodies(
 
 const canvas = document.createElement('canvas');
 document.body.appendChild(canvas);
-canvas.width = 800 * devicePixelRatio
-canvas.height = 600 * devicePixelRatio
-canvas.style.width = '800px'
-canvas.style.width = '600px'
-const ctx = canvas.getContext('2d')
-ctx.scale(devicePixelRatio, devicePixelRatio);
 
-const SolarSystem = [
-  MassiveBody.FromGravitationalParameter(1.3271244004193938e+11 * Math.pow(Kilo * Metre, 3) / Math.pow(Second, 2), "Sun"),
-  MassiveBody.FromGravitationalParameter(3.9860043543609598e+05 * Math.pow(Kilo * Metre, 3) / Math.pow(Second, 2), "Earth"),
-  MassiveBody.FromGravitationalParameter(4.9028000661637961e+03 * Math.pow(Kilo * Metre, 3) / Math.pow(Second, 2), "Luna"),
+
+const SolarSystemData = [
+  {
+    name: "Sol",
+    gravitational_parameter: 1.3271244004193938e+11 * Math.pow(Kilo * Metre, 3) / Math.pow(Second, 2),
+    mean_radius: 696000.0 * Kilo * Metre,
+  },
+  {
+    name: "Earth",
+    gravitational_parameter: 3.9860043543609598e+05 * Math.pow(Kilo * Metre, 3) / Math.pow(Second, 2),
+    mean_radius: 6371.0084 * Kilo * Metre,
+  },
+  {
+    name: "Luna",
+    gravitational_parameter: 4.9028000661637961e+03 * Math.pow(Kilo * Metre, 3) / Math.pow(Second, 2),
+    mean_radius: 1737.4 * Kilo * Metre,
+  },
+  {
+    name: "Mercury",
+    gravitational_parameter: 2.2031780000000021e+04 * Math.pow(Kilo * Metre, 3) / Math.pow(Second, 2),
+    mean_radius: 2439.7 * Kilo * Metre,
+  },
+  {
+    name: "Venus",
+    gravitational_parameter: 3.2485859200000006e+05 * Math.pow(Kilo * Metre, 3) / Math.pow(Second, 2),
+    mean_radius: 6051.8 * Kilo * Metre,
+  },
+  {
+    name: "Mars",
+    gravitational_parameter: 4.282837362069909e+04 * Math.pow(Kilo * Metre, 3) / Math.pow(Second, 2),
+    mean_radius: 3389.5 * Kilo * Metre,
+  },
 ]
+
+const SolarSystem = SolarSystemData.map(body =>
+  MassiveBody.FromGravitationalParameter(body.gravitational_parameter, body.name))
 
 const SolarSystemJD2451545 = [
   {
-    body: "Sun",
+    body: "Sol",
     position: new Vec3(
       -1.067598502264559e+06 * Kilo * Metre,
       -3.959890535950128e+05 * Kilo * Metre,
@@ -328,30 +361,94 @@ const SolarSystemJD2451545 = [
       -2.481970755642522e+00 * Kilo * Metre / Second,
     ),
   },
+  {
+    body: "Mercury",
+    position: new Vec3(
+      -2.052932489502387e+07 * Kilo * Metre,
+      -6.032395676436062e+07 * Kilo * Metre,
+      -3.013084385588142e+07 * Kilo * Metre,
+    ),
+    velocity: new Vec3(
+      +3.700430445042139e+01 * Kilo * Metre / Second,
+      -8.541376874560308e+00 * Kilo * Metre / Second,
+      -8.398372276762027e+00 * Kilo * Metre / Second,
+    ),
+  },
+  {
+    body: "Venus",
+    position: new Vec3(
+      -1.085240925511762e+08 * Kilo * Metre,
+      -7.318517883756028e+06 * Kilo * Metre,
+      +3.548115911200081e+06 * Kilo * Metre,
+    ),
+    velocity: new Vec3(
+      +1.391218618039207e+00 * Kilo * Metre / Second,
+      -3.202951994557884e+01 * Kilo * Metre / Second,
+      -1.449708670519373e+01 * Kilo * Metre / Second,
+    ),
+  },
+  {
+    body: "Mars",
+    position: new Vec3(
+      +2.069805421180782e+08 * Kilo * Metre,
+      -1.863697276138850e+05 * Kilo * Metre,
+      -5.667233334924674e+06 * Kilo * Metre,
+    ),
+    velocity: new Vec3(
+      +1.171984953383225e+00 * Kilo * Metre / Second,
+      +2.390670820059185e+01 * Kilo * Metre / Second,
+      +1.093392065180724e+01 * Kilo * Metre / Second,
+    ),
+  },
 ]
 
 function main() {
+  const camera = new THREE.PerspectiveCamera(75, 800 / 600, 0.1, 10000);
+
+  const renderer = new THREE.WebGLRenderer({canvas, antialias: true});
+  renderer.setSize(800, 600);
+
+  const scene = new THREE.Scene();
+
+  camera.position.set(0, 0, 1000);
+  camera.lookAt(0, 0, 0);
+
+  let controls: any;
+  const controlType = 'trackball';
+  if (controlType === 'trackball') {
+    controls = new (TrackballControls as any)(camera, renderer.domElement);
+    controls.staticMoving = true;
+    controls.dynamicDampingFactor = 0.5;
+  } else if (controlType === 'orbit') {
+    controls = new (OrbitControls as any)(camera, renderer.domElement);
+    controls.enableZoom = true;
+    controls.update();
+  }
+
+
   const e = new Ephemeris(SolarSystem);
   const initial_state = {
     positions: SolarSystemJD2451545.map(b => b.position),
     velocities: SolarSystemJD2451545.map(b => b.velocity),
     time: 0,
   };
-  const append_state = s => {
-    ctx.save();
-    ctx.translate(ctx.canvas.width/(2 * devicePixelRatio), ctx.canvas.height/(2 * devicePixelRatio));
-    const scale = 2e-9;
-    for (let i = 0; i < e.bodies.length; i++) {
-      const body = e.bodies[i];
+
+  const m = new THREE.Matrix4();
+  m.makeScale(1e-9, 1e-9, 1e-9);
+
+  const trajGeoms: Array<THREE.Geometry> = [];
+  for (let i = 0; i < SolarSystem.length; i++) {
+    const geom = new THREE.Geometry();
+    const q = initial_state.positions[i];
+    geom.vertices.push(new THREE.Vector3(q.x, q.y, q.z).applyMatrix4(m));
+    trajGeoms.push(geom);
+  }
+
+  const append_state = (s: SystemState) => {
+    for (let i = 0; i < s.positions.length; i++) {
       const q = s.positions[i];
-      const v = s.velocities[i];
-      const r = body.name === "Luna" ? 1.5 : 3;
-      ctx.fillStyle = body.name === "Luna" ? "lightblue" : "black";
-      ctx.beginPath();
-      ctx.arc(q.x * scale, q.y * scale, r, 0, Math.PI*2);
-      ctx.fill();
+      trajGeoms[i].vertices.push(new THREE.Vector3(q.x, q.y, q.z).applyMatrix4(m));
     }
-    ctx.restore();
   };
   append_state(initial_state);
   const srkn = new SymplecticRungeKuttaNyströmIntegrator(
@@ -361,6 +458,50 @@ function main() {
     append_state,
     2e5
   );
-  srkn.Solve(4e7);
+  srkn.Solve(3e7);
+
+  // https://mattdesl.svbtle.com/drawing-lines-is-hard
+  for (let i = 0; i < SolarSystem.length; i++) {
+    const material = new MeshLineMaterial({
+      color: new THREE.Color(e.bodies[i].name === 'Luna' ? 0x00ffff : 0x0000ff),
+      lineWidth: 3,
+      resolution: new THREE.Vector2(800, 600),
+      sizeAttenuation: 0,
+    });
+    const line = new MeshLine();
+    line.setGeometry(trajGeoms[i]);
+    scene.add(new THREE.Mesh(line.geometry, material));
+  }
+
+  const lods: Array<THREE.LOD> = [];
+  for (let i = 0; i < SolarSystem.length; i++) {
+    const r = SolarSystemData[i].mean_radius;
+
+    const lod = new THREE.LOD();
+    const geom0 = new THREE.IcosahedronGeometry(r * m.elements[0], 3);
+    const material0 = new THREE.MeshBasicMaterial({color: 0xff0000});
+    const planet0 = new THREE.Mesh(geom0, material0);
+    lod.addLevel(planet0, 0);
+    const geom1 = new THREE.IcosahedronGeometry(r * m.elements[0], 2);
+    const material1 = new THREE.MeshBasicMaterial({color: 0xffff00});
+    const planet1 = new THREE.Mesh(geom1, material1);
+    lod.addLevel(planet1, 75);
+    const material2 = new THREE.SpriteMaterial({color: 0xffffff, sizeAttenuation: false} as any);
+    const geom2 = new THREE.Sprite(material2);
+    geom2.scale.set(0.05, 0.05, 1);
+    lod.addLevel(geom2, 125);
+    const q = initial_state.positions[i];
+    lod.position.copy(new THREE.Vector3(q.x, q.y, q.z).applyMatrix4(m));
+    scene.add(lod);
+    lods.push(lod);
+  }
+
+  function animate() {
+    requestAnimationFrame(animate);
+    renderer.render(scene, camera);
+    controls.update();
+    lods.forEach(lod => lod.update(camera));
+  }
+  animate();
 }
 main()
