@@ -5,6 +5,8 @@ import * as TC from './TrackballControls';
 const {TrackballControls} = TC as any;
 import {MeshLine, MeshLineMaterial} from 'three.meshline';
 
+import bodyMarkerURL from './assets/Body marker.png';
+
 const Metre = 1;
 const Kilo = 1e3;
 const Second = 1;
@@ -407,6 +409,7 @@ function main() {
 
   const renderer = new THREE.WebGLRenderer({canvas, antialias: true});
   renderer.setSize(800, 600);
+  renderer.setPixelRatio(devicePixelRatio)
 
   const scene = new THREE.Scene();
 
@@ -473,23 +476,25 @@ function main() {
     scene.add(new THREE.Mesh(line.geometry, material));
   }
 
+  const bodyMarkerTexture = new THREE.TextureLoader().load(bodyMarkerURL);
   const lods: Array<THREE.LOD> = [];
   for (let i = 0; i < SolarSystem.length; i++) {
     const r = SolarSystemData[i].mean_radius;
+    const rs = r * m.elements[0];
 
     const lod = new THREE.LOD();
-    const geom0 = new THREE.IcosahedronGeometry(r * m.elements[0], 3);
+    const geom0 = new THREE.IcosahedronGeometry(rs, 3);
     const material0 = new THREE.MeshBasicMaterial({color: 0xff0000});
     const planet0 = new THREE.Mesh(geom0, material0);
     lod.addLevel(planet0, 0);
-    const geom1 = new THREE.IcosahedronGeometry(r * m.elements[0], 2);
+    const geom1 = new THREE.IcosahedronGeometry(rs, 2);
     const material1 = new THREE.MeshBasicMaterial({color: 0xffff00});
     const planet1 = new THREE.Mesh(geom1, material1);
-    lod.addLevel(planet1, 75);
-    const material2 = new THREE.SpriteMaterial({color: 0xffffff, sizeAttenuation: false} as any);
+    lod.addLevel(planet1, 250 * rs);
+    const material2 = new THREE.SpriteMaterial({color: 0xffffff, sizeAttenuation: false, map: bodyMarkerTexture} as any);
     const geom2 = new THREE.Sprite(material2);
     geom2.scale.set(0.05, 0.05, 1);
-    lod.addLevel(geom2, 125);
+    lod.addLevel(geom2, 500 * rs);
     const q = initial_state.positions[i];
     lod.position.copy(new THREE.Vector3(q.x, q.y, q.z).applyMatrix4(m));
     scene.add(lod);
