@@ -20,7 +20,6 @@
     "@types/three": "^0.92.18",
     "parcel-bundler": "^1.9.7",
     "three": "^0.96.0",
-    "three.meshline": "^1.1.0",
     "typescript": "^3.0.3"
   }
 }

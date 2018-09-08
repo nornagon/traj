@@ -3,11 +3,11 @@ import * as OC from './OrbitControls';
 const {OrbitControls} = OC as any;
 import * as TC from './TrackballControls';
 const {TrackballControls} = TC as any;
-import {MeshLine, MeshLineMaterial} from 'three.meshline';
+import {MeshLine, MeshLineMaterial} from './MeshLine';
 import {SymplecticRungeKuttaNyströmIntegrator} from './SymplecticRungeKuttaNyströmIntegrator';
 import {McLachlanAtela1992Order5Optimal} from './IntegrationMethods';
 
-import {SystemState, Instant, Displacement, Acceleration} from './types';
+import {SystemState, Instant, Displacement, Acceleration, Velocity, Duration} from './types';
 import {GravitationalConstant} from './quantities';
 import {SolarSystemData, SolarSystemJD2451545} from './SolarSystem';
 
@@ -31,6 +31,7 @@ class MassiveBody {
   name: string;
   gravitational_parameter: number; // [Length]^3 / [Time]^2
   mass: number;
+  mean_radius: number;
 
   constructor(name: string, gravitational_parameter: number, mass: number) {
     this.name = name;
@@ -132,152 +133,194 @@ function ComputeGravitationalAccelerationByMassiveBodyOnMassiveBodies(
   }
 }
 
+class World {
+  celestials: Array<MassiveBody>;
+  ephemeris: Ephemeris;
+  integrator: SymplecticRungeKuttaNyströmIntegrator;
+  state: SystemState;
+
+  camera: THREE.PerspectiveCamera;
+  scene: THREE.Scene;
+  renderer: THREE.WebGLRenderer;
+  controls: any;
+
+  celestialNodes: Array<THREE.Object3D>;
+  trajectoryNodes: Array<THREE.Object3D>;
+
+  // Transformation from MKS to renderer coords.
+  scale: THREE.Matrix4;
+
+  constructor(
+    bodies: Array<MassiveBody>,
+    initial_state: SystemState,
+    method: any
+  ) {
+    this.celestials = bodies;
+    this.ephemeris = new Ephemeris(this.celestials);
+    this.state = initial_state;
+    this.integrator = new SymplecticRungeKuttaNyströmIntegrator(
+      method,
+      this.state,
+      this.ComputeAcceleration.bind(this),
+      this.AppendState.bind(this),
+      1e3
+    );
+
+    this.camera = new THREE.PerspectiveCamera(75, 800/600, 0.0001, 10000);
+    this.renderer = new THREE.WebGLRenderer({canvas, antialias: true});
+    this.renderer.setSize(800, 600);
+    this.renderer.setPixelRatio(devicePixelRatio);
+
+    this.scene = new THREE.Scene();
+    this.controls = new (TrackballControls as any)(this.camera, this.renderer.domElement);
+    this.scale = new THREE.Matrix4().makeScale(1e-9, 1e-9, 1e-9);
+
+    this.camera.position.set(0, 0, 1000);
+    this.camera.lookAt(0, 0, 0);
+
+    this.InitializeCelestialNodes();
+    this.InitializeTrajectoryNodes();
+
+    this.integrator.Solve(1e3);
+  }
+
+  InitializeCelestialNodes() {
+    this.celestialNodes = [];
+    const bodyMarkerTexture = new THREE.TextureLoader().load(bodyMarkerURL);
+    for (let i = 0; i < this.celestials.length; i++) {
+      const body = this.celestials[i]
+      const r = body.mean_radius;
+      const rs = r * this.scale.elements[0];
+
+      const lod = new THREE.LOD();
+
+      // LOD 0: icosahedron with detail=3
+      const geom0 = new THREE.IcosahedronGeometry(rs, 3);
+      const material0 = new THREE.MeshBasicMaterial({color: 0xff0000});
+      const planet0 = new THREE.Mesh(geom0, material0);
+      lod.addLevel(planet0, 0);
+
+      // LOD 1: icosahedron with detail=2
+      const geom1 = new THREE.IcosahedronGeometry(rs, 2);
+      const material1 = new THREE.MeshBasicMaterial({color: 0xffff00});
+      const planet1 = new THREE.Mesh(geom1, material1);
+      lod.addLevel(planet1, 250);// * rs);
+
+      // LOD 2: sprite icon
+      const material2 = new THREE.SpriteMaterial({
+        color: 0xffffff, sizeAttenuation: false, map: bodyMarkerTexture, opacity: 0.5} as any);
+      const geom2 = new THREE.Sprite(material2);
+      geom2.scale.set(0.05, 0.05, 1);
+      lod.addLevel(geom2, 500);// * rs);
+
+      // initial position
+      const q = this.state.positions[i];
+      lod.position.copy(new THREE.Vector3(q.x, q.y, q.z).applyMatrix4(this.scale));
+
+      lod.userData.bodyIdx = i;
+      lod.name = body.name;
+
+      this.scene.add(lod);
+      this.celestialNodes.push(lod);
+    }
+  }
+
+  InitializeTrajectoryNodes() {
+    this.trajectoryNodes = [];
+    for (let i = 0; i < this.celestials.length; i++) {
+      const body = this.celestials[i];
+      const material = new MeshLineMaterial({
+        color: new THREE.Color(body.name === 'Luna' ? 0x00ffff : 0x0000ff),
+        lineWidth: 3,
+        resolution: new THREE.Vector2(800, 600),
+        sizeAttenuation: 0,
+        near: 0.1,
+        far: 1000,
+      });
+      const line = new MeshLine();
+      const mesh = new THREE.Mesh(line, material);
+      this.scene.add(mesh);
+      this.trajectoryNodes.push(mesh);
+    }
+  }
+
+  ComputeAcceleration(t: Instant, positions: Array<Displacement>, accelerations: Array<Acceleration>) {
+    this.ephemeris.ComputeMassiveBodiesGravitationalAccelerations(t, positions, accelerations);
+  }
+
+  AppendState(s: SystemState) {
+    this.ephemeris.AppendMassiveBodiesState(s);
+    for (let i = 0; i < this.celestials.length; i++) {
+      const q = s.positions[i];
+      const trajectory = this.ephemeris.trajectories[i];
+      const meshLine = this.trajectoryNodes[i].geometry;
+      const lastPoint = meshLine.copyV3(meshLine.nPoints - 1);
+      const qs = new THREE.Vector3(q.x, q.y, q.z).applyMatrix4(this.scale);
+      if (!lastPoint || lastPoint.distanceTo(qs) > 10) {
+        this.trajectoryNodes[i].geometry.push(qs);
+      }
+    }
+  }
+
+  Step(dt: Duration) {
+    this.integrator.Solve(this.state.time + dt);
+  }
+
+  Render() {
+    this.celestialNodes.forEach(c => {
+      const q = this.state.positions[c.userData.bodyIdx];
+      c.position.copy(new THREE.Vector3(q.x, q.y, q.z).applyMatrix4(this.scale));
+      c.update(this.camera);
+    });
+    this.controls.update();
+    this.renderer.render(this.scene, this.camera);
+  }
+
+  Start() {
+    const that = this;
+    function animate() {
+      that.Step(1e4);
+      that.Render();
+      requestAnimationFrame(animate);
+    }
+    animate();
+    canvas.onclick = e => {
+      const {width, height} = e.target.getBoundingClientRect();
+      const mouse = new THREE.Vector2(e.offsetX, height - e.offsetY);
+      const screenP = new THREE.Vector2();
+      const hit = this.celestialNodes.find(c => {
+        const p = c.position.clone().project(this.camera);
+        screenP.set((p.x + 1) / 2 * width, (p.y + 1) / 2 * height)
+        return mouse.distanceTo(screenP) < 5;
+      });
+      if (hit) {
+        hit.add(this.camera);
+        this.controls.target.set(0,0,0);
+      }
+    }
+  }
+}
+
 const canvas = document.createElement('canvas');
 document.body.appendChild(canvas);
 
-const SolarSystem = SolarSystemData.map(body =>
-  MassiveBody.FromGravitationalParameter(body.gravitational_parameter, body.name))
+const SolarSystem = SolarSystemData.map(body => {
+  const mb = MassiveBody.FromGravitationalParameter(body.gravitational_parameter, body.name);
+  mb.mean_radius = body.mean_radius;
+  return mb;
+})
 
 function main() {
-  const camera = new THREE.PerspectiveCamera(75, 800 / 600, 0.001, 10000);
-
-  const renderer = new THREE.WebGLRenderer({canvas, antialias: true});
-  renderer.setSize(800, 600);
-  renderer.setPixelRatio(devicePixelRatio)
-
-  const scene = new THREE.Scene();
-
-  camera.position.set(0, 0, 1000);
-  camera.lookAt(0, 0, 0);
-
-  let controls: any;
-  const controlType = 'trackball';
-  if (controlType === 'trackball') {
-    controls = new (TrackballControls as any)(camera, renderer.domElement);
-    //controls.staticMoving = true;
-    //controls.dynamicDampingFactor = 0.5;
-  } else if (controlType === 'orbit') {
-    controls = new (OrbitControls as any)(camera, renderer.domElement);
-    controls.enableZoom = true;
-    controls.update();
-  }
-
-
-  const e = new Ephemeris(SolarSystem);
   const initial_state = {
     positions: SolarSystemJD2451545.map(b => b.position),
     velocities: SolarSystemJD2451545.map(b => b.velocity),
     time: 0,
   };
-
-  const m = new THREE.Matrix4();
-  m.makeScale(1e-9, 1e-9, 1e-9);
-
-  const trajGeoms: Array<THREE.Geometry> = [];
-  for (let i = 0; i < SolarSystem.length; i++) {
-    const geom = new THREE.Geometry();
-    const q = initial_state.positions[i];
-    geom.vertices.push(new THREE.Vector3(q.x, q.y, q.z).applyMatrix4(m));
-    trajGeoms.push(geom);
-  }
-  const lines: Array<MeshLine> = [];
-
-  const append_state = (s: SystemState) => {
-    e.AppendMassiveBodiesState(s);
-    for (let i = 0; i < s.positions.length; i++) {
-      const q = s.positions[i];
-      const three_q = new THREE.Vector3(q.x, q.y, q.z).applyMatrix4(m);
-      trajGeoms[i].vertices.push(three_q);
-      if (lines.length) {
-        lines[i].advance(three_q);
-      }
-    }
-  };
-  append_state(initial_state);
-  const srkn = new SymplecticRungeKuttaNyströmIntegrator(
-    McLachlanAtela1992Order5Optimal,
+  const world = new World(
+    SolarSystem,
     initial_state,
-    e.ComputeMassiveBodiesGravitationalAccelerations.bind(e),
-    append_state,
-    1e3
-  );
-  srkn.Solve(1e7);
-
-  // https://mattdesl.svbtle.com/drawing-lines-is-hard
-  for (let i = 0; i < SolarSystem.length; i++) {
-    const material = new MeshLineMaterial({
-      color: new THREE.Color(e.bodies[i].name === 'Luna' ? 0x00ffff : 0x0000ff),
-      lineWidth: 3,
-      resolution: new THREE.Vector2(800, 600),
-      sizeAttenuation: 0,
-      near: 0.001,
-      far: 10000,
-    });
-    const line = new MeshLine();
-    lines.push(line);
-    line.setGeometry(trajGeoms[i]);
-    scene.add(new THREE.Mesh(line.geometry, material));
-  }
-
-  const bodyMarkerTexture = new THREE.TextureLoader().load(bodyMarkerURL);
-  const lods: Array<THREE.LOD> = [];
-  for (let i = 0; i < SolarSystem.length; i++) {
-    const r = SolarSystemData[i].mean_radius;
-    const rs = r * m.elements[0];
-
-    const lod = new THREE.LOD();
-    const geom0 = new THREE.IcosahedronGeometry(rs, 3);
-    const material0 = new THREE.MeshBasicMaterial({color: 0xff0000});
-    const planet0 = new THREE.Mesh(geom0, material0);
-    lod.addLevel(planet0, 0);
-    const geom1 = new THREE.IcosahedronGeometry(rs, 2);
-    const material1 = new THREE.MeshBasicMaterial({color: 0xffff00});
-    const planet1 = new THREE.Mesh(geom1, material1);
-    lod.addLevel(planet1, 250 * rs);
-    const material2 = new THREE.SpriteMaterial({
-      color: 0xffffff, sizeAttenuation: false, map: bodyMarkerTexture, opacity: 0.5} as any);
-    const geom2 = new THREE.Sprite(material2);
-    geom2.scale.set(0.05, 0.05, 1);
-    lod.addLevel(geom2, 500 * rs);
-    const q = initial_state.positions[i];
-    lod.position.copy(new THREE.Vector3(q.x, q.y, q.z).applyMatrix4(m));
-    scene.add(lod);
-    lods.push(lod);
-    lod.userData.bodyIdx = i;
-    lod.name = SolarSystemData[i].name;
-  }
-
-  let cameraTarget = 0;
-
-  function animate() {
-    requestAnimationFrame(animate);
-    //controls.target.copy(lods[cameraTarget].position);
-    controls.update();
-    lods.forEach(lod => {
-      const q = srkn.current_state.positions[lod.userData.bodyIdx];
-      lod.position.copy(new THREE.Vector3(q.x, q.y, q.z).applyMatrix4(m));
-      lod.update(camera);
-    });
-
-    srkn.Solve(srkn.current_state.time + 1e4);
-    renderer.render(scene, camera);
-  }
-
-  canvas.onclick = e => {
-    const {width, height} = e.target.getBoundingClientRect();
-    const mouse = new THREE.Vector2(e.offsetX, height - e.offsetY);
-    const screenP = new THREE.Vector2();
-    const hit = lods.find(lod => {
-      const p = lod.position.clone().project(camera);
-      screenP.set((p.x + 1) / 2 * width, (p.y + 1) / 2 * height)
-      return mouse.distanceTo(screenP) < 5;
-    });
-    if (hit) {
-      cameraTarget = hit.userData.bodyIdx;
-      hit.add(camera);
-      controls.target.set(0,0,0);
-    }
-  }
-  animate();
+    McLachlanAtela1992Order5Optimal,
+  )
+  world.Start();
 }
 main()
